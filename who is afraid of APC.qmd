@@ -1,0 +1,367 @@
+---
+title: "Who is afraid of Article Processing Charges?"
+author: "Raoni Rebouças"
+format: html
+editor: visual
+---
+
+First of all, we need to require the needed packages.
+
+## Packages
+
+```{r}
+library(tidyverse)
+library(ggplot2)
+library(data.table)
+library(lubridate)
+library(countrycode)
+library(janitor)
+library(ggimage)
+library(ggflags)
+library(readxl)
+```
+
+## Retrieving Scimago dataset
+
+There are several ways to retrieve the dataset from Web of Science. One of these methods is through the Scimago platform, which compiles data from Scopus and organize it by country and year since 1996. We could directly webscrap the data from the Scimago page, but there is a package (sjrdata) with the data ready for R.
+
+```{r}
+library(sjrdata)
+scimago = sjr_countries
+```
+
+## Concatenating with Research and Development (R&D)
+
+We used data available in World Bank for R&D and concatenated with Scimago data trough the names of countries and years. First, we concatenated only publications with R&D:
+
+```{r}
+money = read.csv("investimentos_%PIB.csv", sep = ";")
+
+money = money %>% 
+  dplyr::rename(country = Country.Name) %>% 
+  dplyr::rename(percent.GDP = X.GDP) %>%
+  dplyr::rename(R.D.dollars = R.D..US..) 
+
+data.money = merge(scimago, money, by = c("year", "country"))
+data.money$R.D.dollars = as.numeric(data.money$R.D.dollars)
+data.money[data.money == 0]<-NA
+
+
+data.money = data.money %>% 
+  drop_na(R.D.dollars) %>% 
+  mutate(cost.per.article = R.D.dollars/documents) %>% 
+  mutate(cost.per.IF = R.D.dollars/citations_per_document)
+data.money$ISO3 = countrycode(data.money$country, "country.name", "iso3c")
+data.money$ISO2 = tolower(countrycode(data.money$country, "country.name", "iso2c"))
+```
+
+and now we included patents:
+
+```{r}
+patents <- read_xlsx(path = "patents.xlsx")
+
+patents = patents %>% 
+  pivot_longer(
+    cols = !c("Country Name", "Country Code"), 
+    names_to = "year", 
+    values_to = "count"
+  ) %>% 
+  rename(ISO3 = "Country Code")
+## merging with data.money
+data.money = left_join(data.money, patents, by = c("ISO3", "year"))
+data.money = data.money %>% 
+  rename(n.patents = "count") %>% 
+  select(!"Country Name") %>%
+    mutate(n.patents = replace_na(n.patents, 0)) %>% 
+  mutate(total.publications = documents + n.patents,
+         cost.total = R.D.dollars/total.publications) 
+
+## exporting an averaged time series ----
+data.money.avg = data.money %>% 
+  dplyr::group_by(country, ISO3, ISO2) %>% 
+  dplyr::summarize(across(where(is.numeric), ~ mean(.x, na.rm = TRUE))) %>% 
+  dplyr::select(country, documents, R.D.dollars, cost.per.article,
+                citations_per_document, citations, h_index,
+                cost.per.IF, ISO3, ISO2, n.patents, total.publications,cost.total)
+write.csv(data.money.avg, "data.money.avg.csv")
+```
+
+## Publication trends
+
+To assess the publication trends among countries, we used a simple regression between publications and years.
+
+```{r}
+### growth models ----
+highest.publishers = data.money %>% 
+  filter(str_detect(country, "United States|China|United Kingdom|Germany|Japan|France|Italy|Canada|India|Spain|Australia|Russian Federation|Brazil|Netherlands|Switzerland|Sweden|Poland|Belgium|Indonesia|Mexico"))
+
+highest.publishers$year = as.numeric(highest.publishers$year)
+
+#United States
+usa.lm = lm(total.publications ~ year, data = highest.publishers[highest.publishers$country=="United States",])
+usa.lm$coefficients
+
+#China
+chn.lm = lm(total.publications ~ year, data = highest.publishers[highest.publishers$country=="China",])
+chn.lm$coefficients
+
+#United Kingdom
+uk.lm = lm(total.publications ~ year, data = highest.publishers[highest.publishers$country=="United Kingdom",])
+uk.lm$coefficients
+
+#Germany
+ger.lm = lm(total.publications ~ year, data = highest.publishers[highest.publishers$country=="Germany",])
+ger.lm$coefficients
+
+#Japan
+jpn.lm = lm(total.publications ~ year, data = highest.publishers[highest.publishers$country=="Japan",])
+jpn.lm$coefficients
+
+#France
+fra.lm = lm(total.publications ~ year, data = highest.publishers[highest.publishers$country=="France",])
+fra.lm$coefficients
+
+#Italy
+ita.lm = lm(total.publications ~ year, data = highest.publishers[highest.publishers$country=="Italy",])
+ita.lm$coefficients
+
+#Canada
+can.lm = lm(total.publications ~ year, data = highest.publishers[highest.publishers$country=="Canada",])
+can.lm$coefficients
+
+#India
+ind.lm = lm(total.publications ~ year, data = highest.publishers[highest.publishers$country=="India",])
+ind.lm$coefficients
+
+#Spain
+spn.lm = lm(total.publications ~ year, data = highest.publishers[highest.publishers$country=="Spain",])
+spn.lm$coefficients
+
+#Australia
+aus.lm = lm(total.publications ~ year, data = highest.publishers[highest.publishers$country=="Australia",])
+aus.lm$coefficients
+
+#Russia
+rus.lm = lm(total.publications ~ year, data = highest.publishers[highest.publishers$country=="Russian Federation",])
+rus.lm$coefficients
+
+#Brazil
+bra.lm = lm(total.publications ~ year, data = highest.publishers[highest.publishers$country=="Brazil",])
+bra.lm$coefficients
+
+#Netherlands
+ndl.lm = lm(total.publications ~ year, data = highest.publishers[highest.publishers$country=="Netherlands",])
+ndl.lm$coefficients
+
+#Switzerland
+swz.lm = lm(total.publications ~ year, data = highest.publishers[highest.publishers$country=="Switzerland",])
+swz.lm$coefficients
+
+#Sweden
+swd.lm = lm(total.publications ~ year, data = highest.publishers[highest.publishers$country=="Sweden",])
+swd.lm$coefficients
+
+#Poland
+pol.lm = lm(total.publications ~ year, data = highest.publishers[highest.publishers$country=="Poland",])
+pol.lm$coefficients
+
+#Belgium
+blg.lm = lm(total.publications ~ year, data = highest.publishers[highest.publishers$country=="Belgium",])
+blg.lm$coefficients
+
+#indonesia
+ids.lm = lm(total.publications ~ year, data = highest.publishers[highest.publishers$country=="Indonesia",])
+ids.lm$coefficients
+
+#Mexico
+mex.lm = lm(total.publications ~ year, data = highest.publishers[highest.publishers$country=="Mexico",])
+mex.lm$coefficients
+
+
+countries = list(levels(factor(highest.publishers$country)))
+coefficients = data.frame(country = countries, 
+                          intercepts = c(aus.lm$coefficients[1],
+                                         blg.lm$coefficients[1],
+                          bra.lm$coefficients[1],
+                          can.lm$coefficients[1],
+                          chn.lm$coefficients[1],
+                          mex.lm$coefficients[1],
+                          fra.lm$coefficients[1],
+                          ger.lm$coefficients[1],
+                          ind.lm$coefficients[1],
+                          ids.lm$coefficients[1],
+                          ita.lm$coefficients[1],
+                          jpn.lm$coefficients[1],
+                          ndl.lm$coefficients[1],
+                          pol.lm$coefficients[1],
+                          rus.lm$coefficients[1],
+                          spn.lm$coefficients[1],
+                          swd.lm$coefficients[1],
+                          swz.lm$coefficients[1],
+                          uk.lm$coefficients[1],
+                          usa.lm$coefficients[1]),
+                          coefficients = c(aus.lm$coefficients[2],
+                            blg.lm$coefficients[2],
+                            bra.lm$coefficients[2],
+                            can.lm$coefficients[2],
+                            chn.lm$coefficients[2],
+                            mex.lm$coefficients[2],
+                            fra.lm$coefficients[2],
+                            ger.lm$coefficients[2],
+                            ind.lm$coefficients[2],
+                            ids.lm$coefficients[2],
+                            ita.lm$coefficients[2],
+                            jpn.lm$coefficients[2],
+                            ndl.lm$coefficients[2],
+                            pol.lm$coefficients[2],
+                            rus.lm$coefficients[2],
+                            spn.lm$coefficients[2],
+                            swd.lm$coefficients[2],
+                            swz.lm$coefficients[2],
+                            uk.lm$coefficients[2],
+                            usa.lm$coefficients[2]))
+
+coefficients = coefficients %>% 
+  rename(Country = c..Australia....Belgium....Brazil....Canada....China....France...)
+
+knitr::kable(coefficients, format = "html")
+```
+
+Here a chart showing the publication trend among countries
+
+```{r}
+ggplot(highest.publishers, aes(x= year, y= total.publications))+
+  geom_point(aes(colour = country))+
+  stat_smooth(method = "lm", color = "black",aes(fill = country)) + 
+  theme_classic()+
+  theme(legend.position = "none")+
+  scale_y_continuous(trans = "log")+
+  facet_wrap( ~ country)
+
+```
+
+## Article Processing Charges (APC)
+
+We used data of APC from three publishing houses: Elsievier, Wiley and Springer. All of them freely report the APCs of their journals. We downloaded these reports and organized to remove those with "hybrid" of "free" APC types.
+
+```{r}
+### Elsievier ----
+elsievier = read.csv("elsievier_APC.csv", header=TRUE, sep= ";", dec=",")
+elsievier = elsievier[!apply(elsievier == "", 1, all),]
+
+elsievier = elsievier %>% 
+  filter(model == "Open access") %>% 
+  filter(!USS =="**") %>% 
+  add_column(mirror = "elsievier") %>% 
+  select(!c(model, EUR, GBP, JPY)) %>% 
+  rename(USD = USS)
+
+elsievier$USD = as.numeric(elsievier$USD)
+
+### Wiley ----
+wiley = read.csv("wiley_APC.csv", header=TRUE, sep=";")
+
+wiley = wiley %>% 
+  filter(!USD == " APCs currently waived") %>%
+  select(!c(Subject.Area, License.Types.Offered)) %>% 
+  rename(issn = Online.ISSN, journal = Journal.Name,) %>% 
+  select(!c(GBP, EUR)) %>% 
+  dplyr::relocate(journal, .after = issn) %>% 
+  add_column(mirror = "wiley") %>% 
+  filter(!USD == " APCs currently waived ")
+
+wiley$USD = as.numeric(wiley$USD)
+
+### Springer ----
+springer = read.csv("springer_APC.csv", header=TRUE, sep=";")
+
+springer = springer %>% 
+  select(c(issn, journal, USD)) %>% 
+  filter(!USD == "see website") %>% 
+  filter(!str_detect(USD, "(RSF)")) %>% 
+  add_column(mirror = "springer") %>% 
+  filter(!row_number() %in% c(481:1126))
+
+springer$USD = as.numeric(springer$USD)
+
+### joining all ----
+apcs = rbind(elsievier, wiley, springer)
+mean(apcs$USD)
+```
+
+Now we corrected the APCs by Purchase Power Parity (PPP) according data available in World Bank.
+
+```{r}
+ppp = read.csv("ppp.csv", header=TRUE, sep=",")
+ppp$X2021..YR2021. = as.numeric(ppp$X2021..YR2021.)
+
+ppp[ppp == ".."] <- NA
+
+ppp = ppp %>% 
+  select(Country.Code, X2021..YR2021.) %>% 
+  drop_na(X2021..YR2021.) %>% 
+  rename(ppp2021 = X2021..YR2021.) %>% 
+  rename(ISO3 = Country.Code)
+
+
+ppp = left_join(ppp, data.money.avg, by = "ISO3") %>% 
+  drop_na()
+
+ppp = ppp %>% 
+  mutate(cost.publish.ppp = 2161.288*ppp$ppp2021, 
+         perc.cost.to.publish = (cost.publish.ppp*100)/cost.total) %>% 
+  mutate("can?" = case_when(perc.cost.to.publish > 1 ~ "NO",
+                            perc.cost.to.publish < 1 ~ "YES")) %>% 
+  dplyr::arrange(desc(perc.cost.to.publish)) %>% 
+  mutate(count = 1:122)
+
+#exporting the dataset of corrected values according PPP
+view(ppp)
+
+ppp2 = ppp %>% 
+  select(ISO3, ppp2021, country, cost.total, cost.publish.ppp,
+         perc.cost.to.publish) %>% 
+  mutate(ppp2021 = round(ppp2021, 2)) %>% 
+  mutate(cost.total = round(cost.total, 2)) %>% 
+  mutate(cost.publish.ppp = round(cost.publish.ppp, 2)) %>% 
+  mutate(perc.cost.to.publish = round(perc.cost.to.publish, 2))
+write.csv(ppp2, "ppp2.csv")
+```
+
+## Charts
+
+Once we have the cost per publication and the APCs, we can use some charts to evaluate the general patterns. Firstly, a rank of publications.
+
+```{r}
+### rank of publications ----
+data.money.20 = data.money.avg %>% 
+  dplyr::arrange(desc(total.publications))
+
+ggplot(data.money.20[1:20,], aes(x = reorder(country, total.publications), 
+                                 y = total.publications, width = 0.8))+
+  geom_bar(stat = "identity", colour = "red", 
+           aes(fill = cost.total)) +
+  ylab("Number of publications")+
+  xlab("Countries")+
+  theme_classic()+
+  scale_fill_gradient(low = "white", 
+                      high = "red", name = "Cost of \n publication \n (US$)") +
+  theme(legend.position ="right", axis.text = element_text(size = 6)) +
+  coord_flip()
+```
+
+Now the relation between R&D and publications, with price per publication as the size of circles.
+
+```{r}
+## price per document ----
+
+ggplot(data.money.20[1:20,], aes(x = R.D.dollars, y = total.publications, 
+                           size = cost.total)) +
+  geom_flag(aes(country = ISO2)) +
+  scale_size(range = c(0.1,15), name = "Cost per \n publication") +
+  scale_x_continuous(trans = "log", labels = scales::scientific) +
+  scale_y_continuous(trans = "log", labels = scales::scientific) + 
+  geom_smooth(method = "lm", color = "red", fill = "red", alpha = 0.3) +
+  xlab("Money for Research & Development") + ylab("Publications") +
+  theme_classic()
+```
